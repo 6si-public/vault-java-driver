@@ -3,6 +3,7 @@ package io.github.jopenlibs.vault;
 import io.github.jopenlibs.vault.response.LogicalResponse;
 import io.github.jopenlibs.vault.vault.VaultTestUtils;
 import io.github.jopenlibs.vault.vault.mock.RetriesMockVault;
+import io.github.jopenlibs.vault.vault.mock.StatusRetriesMockVault;
 import java.util.HashMap;
 import org.eclipse.jetty.server.Server;
 import org.junit.Test;
@@ -53,4 +54,44 @@ public class RetryTests {
         VaultTestUtils.shutdownMockVault(server);
     }
 
+    @Test
+    public void testRetries_Write_412() throws Exception {
+        final StatusRetriesMockVault retriesMockVault = new StatusRetriesMockVault(5, 200,
+                "{\"lease_id\":\"12345\",\"renewable\":false,\"lease_duration\":10000,\"data\":{\"value\":\"mock\"}}", 412);
+        final Server server = VaultTestUtils.initHttpMockVault(retriesMockVault);
+        server.start();
+
+        final VaultConfig vaultConfig = new VaultConfig().address("http://127.0.0.1:8999")
+                .token("mock_token").build();
+        final Vault vault = Vault.create(vaultConfig);
+        final LogicalResponse writeResponse = vault.withRetries(5, 100).logical()
+                .write("secret/hello", new HashMap<String, Object>() {{
+                    put("value", "world");
+                }});
+        try {
+                assertEquals(5, writeResponse.getRetries());
+        } finally {
+                VaultTestUtils.shutdownMockVault(server);
+        }
+
+    }
+
+    @Test
+    public void testRetries_Read_412() throws Exception {
+        final StatusRetriesMockVault retriesMockVault = new StatusRetriesMockVault(5, 200,
+                "{\"lease_id\":\"12345\",\"renewable\":false,\"lease_duration\":10000,\"data\":{\"value\":\"mock\"}}", 412);
+        final Server server = VaultTestUtils.initHttpMockVault(retriesMockVault);
+        server.start();
+
+        final VaultConfig vaultConfig = new VaultConfig().address("http://127.0.0.1:8999")
+                .token("mock_token").build();
+        final Vault vault = Vault.create(vaultConfig);
+        final LogicalResponse writeResponse = vault.withRetries(5, 100).logical()
+                .read("secret/hello");
+        try {
+                assertEquals(5, writeResponse.getRetries());
+        } finally {
+                VaultTestUtils.shutdownMockVault(server);
+        }
+    }
 }
